@@ -9,68 +9,77 @@ from google.oauth2 import service_account
 import requests
 import pandas as pd
 import numpy as np
-
+import math
+import time
 SPREADSHEET_ID = None
 service = None
 sheet = None
+url = "https://api.opensea.io/api/v1/assets"
 
 
-fidenza_rarity_sheet = pd.read_csv("Rarity_Sheets/fidenza_rarity_sheet.csv")
-fidenza_rarity_array = np.array(fidenza_rarity_sheet[["rarity", "rank"]])
-ringers_rarity_sheet = pd.read_csv("Rarity_Sheets/ringers_rarity_sheet.csv")
-ringers_rarity_array = np.array(ringers_rarity_sheet[["rarity", "rank"]])
-pigments_rarity_sheet = pd.read_csv("Rarity_Sheets/pigments_rarity_sheet.csv")
-pigments_rarity_array = np.array(pigments_rarity_sheet[["rarity", "rank"]])
-subscapes_rarity_sheet = pd.read_csv("Rarity_Sheets/subscapes_rarity_sheet.csv")
-subscapes_rarity_array = np.array(subscapes_rarity_sheet[["rarity", "rank"]])
-dino_rarity_sheet = pd.read_csv("Rarity_Sheets/dino_rarity_sheet.csv")
-dino_rarity_array = np.array(dino_rarity_sheet[["rarity", "rank"]])
-archetypes_rarity_sheet = pd.read_csv("Rarity_Sheets/archetypes_rarity_sheet.csv")
-archetypes_rarity_array = np.array(archetypes_rarity_sheet[["rarity", "rank"]])
-def fidenza_for_sale():
-    url = "https://api.opensea.io/api/v1/assets"
-    new_list = []
-    for i in range(40):
-        querystring = {"asset_contract_address": "0xa7d8d9ef8D8Ce8992Df33D8b8CF4Aebabd5bD270",
-                       "token_ids": list(range(78000000+i*25, 78000000+(i+1)*25-1)),
+def multiply(l):
+    m = 1
+    for i, el in enumerate(l):
+        m *= el
+
+    return m
+
+
+def ab_for_sale(collection_name, collection_number, collection_size):
+    iter_num = math.floor(collection_size/25)
+    num = collection_number*1000000
+    extra_nums = collection_size - iter_num*25
+    trait_val_list = []
+    id_trait_list = []
+    id_link_price = []
+    for i in range(iter_num):
+        querystring = {"asset_contract_address": "0xa7d8d9ef8d8ce8992df33d8b8cf4aebabd5bd270",
+                       "token_ids": list(range(num + i * 25, num + (i + 1) * 25)),
                        "order_direction": "desc",
                        "offset": "0",
                        "limit": "50"}
 
-        response = requests.request("GET", url, params=querystring)
+        headers = {"Accept": "application/json", "X-API-KEY": "0fba3b6165af43ffb8a9c295f1d8beb5"}
+
+        response = requests.request("GET", url, headers=headers, params=querystring)
         temp_list = list(response.json()['assets'])
         for j, el in enumerate(temp_list):
             if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
-                id = int(el['token_id']) - 78000000
+                current_price = float(el['sell_orders'][0]['current_price'])/ 1e18
+                link = el["permalink"]
                 last_price = "None"
                 last_sale_date = "None"
                 if str(el['last_sale']) != "None":
                     last_sale_date = el['last_sale']['event_timestamp']
                     last_price = float(el['last_sale']['total_price']) / 1e18
-                current_price = float(el['sell_orders'][0]['current_price'])/ 1e18
-                rarity = round(float(fidenza_rarity_array[id, 0]), 5)
-                rank = str(int(fidenza_rarity_array[id, 1])) + "/1000"
-                link = el["permalink"]
                 created_date = el['sell_orders'][0]['created_date']
                 timestamp = el['sell_orders'][0]['listing_time']
-                new_list.append(["Art Blocks Fidenza",
-                    id,
-                    current_price,
-                    rank,
-                    created_date,
-                    link,
-                    rarity,
-                    last_price,
-                    last_sale_date,
-                    timestamp])
-    return new_list
+                id_link_price.append(["Art Blocks " + collection_name,
+                                      int(el['token_id'])-num,
+                                      current_price,
+                                      link,
+                                      created_date,
+                                      timestamp,
+                                      last_price, last_sale_date])
+            id_traits = []
+            for k, element in enumerate(el['traits']):
+                id_traits.append(element['value'])
+                if not trait_val_list:
+                    trait_val_list.append([element['value'], 1])
+                else:
+                    recognized = 0
+                    for l, e in enumerate(trait_val_list):
+                        if element['value'] == e[0]:
+                            e[1] += 1
+                            recognized = 1
+                            break
+                    if recognized == 0:
+                        trait_val_list.append([element['value'], 1])
+            id_trait_list.append([int(el['token_id'])-num, id_traits])
 
-def ringers_for_sale():
-    url = "https://api.opensea.io/api/v1/assets"
-    new_list = []
-    for i in range(40):
-        querystring = {"asset_contract_address": "0xa7d8d9ef8D8Ce8992Df33D8b8CF4Aebabd5bD270",
-                       "token_ids": list(range(13000000+i*25, 13000000+(i+1)*25-1)),
+    if extra_nums > 0:
+        querystring = {"asset_contract_address": "0xa7d8d9ef8d8ce8992df33d8b8cf4aebabd5bd270",
+                       "token_ids": list(range(num + iter_num * 25, num + collection_size)),
                        "order_direction": "desc",
                        "offset": "0",
                        "limit": "50"}
@@ -79,183 +88,261 @@ def ringers_for_sale():
         temp_list = list(response.json()['assets'])
         for j, el in enumerate(temp_list):
             if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
-                id = int(el['token_id']) - 13000000
-                last_price = "None"
-                last_sale_date = "None"
-                if str(el['last_sale']) != "None":
-                    last_sale_date = el['last_sale']['event_timestamp']
-                    last_price = float(el['last_sale']['total_price']) / 1e18
-                current_price = float(el['sell_orders'][0]['current_price'])/ 1e18
-                rarity = round(float(ringers_rarity_array[id, 0]), 5)
-                rank = str(int(ringers_rarity_array[id, 1])) + "/1000"
-                created_date = el['sell_orders'][0]['created_date']
-                link = el["permalink"]
-                timestamp = el['sell_orders'][0]['listing_time']
-                new_list.append(["Art Blocks Ringers",
-                    id,
-                    current_price,
-                    rank,
-                    created_date,
-                    link,
-                    rarity,
-                    last_price,
-                    last_sale_date,
-                    timestamp])
-    return new_list
-
-def pigments_for_sale():
-    url = "https://api.opensea.io/api/v1/assets"
-    new_list = []
-    for i in range(41):
-        querystring = {"asset_contract_address": "0xa7d8d9ef8D8Ce8992Df33D8b8CF4Aebabd5bD270",
-                       "token_ids": list(range(129000000+i*25, 129000000+(i+1)*25-1)),
-                       "order_direction": "desc",
-                       "offset": "0",
-                       "limit": "50"}
-
-        response = requests.request("GET", url, params=querystring)
-        temp_list = list(response.json()['assets'])
-        for j, el in enumerate(temp_list):
-            if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
-                id = int(el['token_id']) - 129000000
-                last_price = "None"
-                last_sale_date = "None"
-                if str(el['last_sale']) != "None":
-                    last_sale_date = el['last_sale']['event_timestamp']
-                    last_price = float(el['last_sale']['total_price']) / 1e18
-                current_price = float(el['sell_orders'][0]['current_price'])/ 1e18
-                rarity = round(float(pigments_rarity_array[id, 0]), 5)
-                rank = str(int(pigments_rarity_array[id, 1])) + "/1024"
-                link = el["permalink"]
-                created_date = el['sell_orders'][0]['created_date']
-                timestamp = el['sell_orders'][0]['listing_time']
-                new_list.append(["Art Blocks Pigments",
-                    id,
-                    current_price,
-                    rank,
-                    created_date,
-                    link,
-                    rarity,
-                    last_price,
-                    last_sale_date,
-                    timestamp])
-    return new_list
-
-def subscapes_for_sale():
-    url = "https://api.opensea.io/api/v1/assets"
-    new_list = []
-    for i in range(32):
-        querystring = {"asset_contract_address": "0xa7d8d9ef8D8Ce8992Df33D8b8CF4Aebabd5bD270",
-                       "token_ids": list(range(53000000+i*25, 53000000+(i+1)*25-1)),
-                       "order_direction": "desc",
-                       "offset": "0",
-                       "limit": "50"}
-
-        response = requests.request("GET", url, params=querystring)
-        temp_list = list(response.json()['assets'])
-        for j, el in enumerate(temp_list):
-            if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
-                id = int(el['token_id']) - 53000000
-                last_price = "None"
-                last_sale_date = "None"
-                if str(el['last_sale']) != "None":
-                    last_sale_date = el['last_sale']['event_timestamp']
-                    last_price = float(el['last_sale']['total_price']) / 1e18
-                current_price = float(el['sell_orders'][0]['current_price'])/ 1e18
-                created_date = el['sell_orders'][0]['created_date']
-                rarity = round(float(subscapes_rarity_array[id, 0]), 5)
-                rank = str(int(subscapes_rarity_array[id, 1]))+"/650"
-                link = el["permalink"]
-                timestamp = el['sell_orders'][0]['listing_time']
-                new_list.append(["Art Blocks Subscapes",
-                    id,
-                    current_price,
-                    rank,
-                    created_date,
-                    link,
-                    rarity,
-                    last_price,
-                    last_sale_date,
-                    timestamp])
-    return new_list
-
-def archetypes_for_sale():
-    url = "https://api.opensea.io/api/v1/assets"
-    new_list = []
-    for i in range(30):
-        querystring = {"asset_contract_address": "0xa7d8d9ef8D8Ce8992Df33D8b8CF4Aebabd5bD270",
-                       "token_ids": list(range(23000000+i*25, 23000000+(i+1)*25-1)),
-                       "order_direction": "desc",
-                       "offset": "0",
-                       "limit": "50"}
-
-        response = requests.request("GET", url, params=querystring)
-        temp_list = list(response.json()['assets'])
-        for j, el in enumerate(temp_list):
-            if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
-                id = int(el['token_id']) - 23000000
-                last_price = "None"
-                last_sale_date = "None"
-                if str(el['last_sale']) != "None":
-                    last_sale_date = el['last_sale']['event_timestamp']
-                    last_price = float(el['last_sale']['total_price']) / 1e18
-                current_price = float(el['sell_orders'][0]['current_price'])/ 1e18
-                created_date = el['sell_orders'][0]['created_date']
-                rarity = round(float(archetypes_rarity_array[id, 0]), 5)
-                rank = str(int(archetypes_rarity_array[id, 1]))+"/600"
-                link = el["permalink"]
-                timestamp = el['sell_orders'][0]['listing_time']
-                new_list.append(["Art Blocks Archetypes",
-                    id,
-                    current_price,
-                    rank,
-                    created_date,
-                    link,
-                    rarity,
-                    last_price,
-                    last_sale_date,
-                    timestamp])
-    return new_list
-
-def dinos_for_sale():
-    url = "https://api.opensea.io/api/v1/assets"
-    new_list = []
-    for i in range(4):
-        querystring = {"asset_contract_address": "0xa7d8d9ef8D8Ce8992Df33D8b8CF4Aebabd5bD270",
-                       "token_ids": list(range(76000000 + i * 25, 76000000 + (i + 1) * 25 - 1)),
-                       "order_direction": "desc",
-                       "offset": "0",
-                       "limit": "50"}
-
-        response = requests.request("GET", url, params=querystring)
-        temp_list = list(response.json()['assets'])
-        for j, el in enumerate(temp_list):
-            if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
-                id = int(el['token_id']) - 76000000
-                last_price = "None"
-                last_sale_date = "None"
-                if str(el['last_sale']) != "None":
-                    last_sale_date = el['last_sale']['event_timestamp']
-                    last_price = float(el['last_sale']['total_price']) / 1e18
                 current_price = float(el['sell_orders'][0]['current_price']) / 1e18
-                created_date = el['sell_orders'][0]['created_date']
-                rarity = round(float(dino_rarity_array[id, 0]), 5)
-                rank = str(int(dino_rarity_array[id, 1]))+"/100"
                 link = el["permalink"]
+                last_price = "None"
+                last_sale_date = "None"
+                if str(el['last_sale']) != "None":
+                    last_sale_date = el['last_sale']['event_timestamp']
+                    last_price = float(el['last_sale']['total_price']) / 1e18
+                created_date = el['sell_orders'][0]['created_date']
                 timestamp = el['sell_orders'][0]['listing_time']
-                new_list.append(["Art Blocks Dino Pals",
-                                 id,
-                                 current_price,
-                                 rank,
-                                 created_date,
-                                 link,
-                                 rarity,
-                                 last_price,
-                                 last_sale_date,
-                                 timestamp])
-    return new_list
+                id_link_price.append(["Art Blocks " + collection_name,
+                                      int(el['token_id']) - num,
+                                      current_price,
+                                      link,
+                                      created_date,
+                                      timestamp,
+                                      last_price, last_sale_date])
+            id_traits = []
+            for k, element in enumerate(el['traits']):
+                id_traits.append(element['value'])
+                if not trait_val_list:
+                    trait_val_list.append([element['value'], 1])
+                else:
+                    recognized = 0
+                    for l, e in enumerate(trait_val_list):
+                        if element['value'] == e[0]:
+                            e[1] += 1
+                            recognized = 1
+                            break
+                    if recognized == 0:
+                        trait_val_list.append([element['value'], 1])
+            id_trait_list.append([int(el['token_id']) - num, id_traits])
 
-def update_sheet():
+    for i, el in enumerate(trait_val_list):
+        el[1] /= collection_size
+    id_rarity_list = []
+    for i, el in enumerate(id_trait_list):
+        trait_vals = []
+        trait_str = []
+        for j, trait in enumerate(el[1]):
+            for k, t in enumerate(trait_val_list):
+                if t[0] == trait:
+                    trait_vals.append(round(t[1], 5))
+                    trait_str.append(str(round(t[1], 7)))
+        trait_mult = multiply(trait_vals)
+        min_trait = min(trait_vals)
+        trait_str.sort()
+        id_rarity_list.append([el[0], trait_mult, min_trait, '|| ' + ' || '.join(trait_str), len(trait_vals)])
+    id_rarity_list.sort(key=lambda x: x[1])
+
+    mult_rank_list = []
+    rank_num = 1
+    for i, el in enumerate(id_rarity_list):
+        if i > 0 and id_rarity_list[i-1][1] == id_rarity_list[i][1]:
+            mult_rank_list.append([id_rarity_list[i][0], mult_rank_list[i-1][1]])
+        else:
+            mult_rank_list.append([id_rarity_list[i][0], rank_num])
+
+        rank_num += 1
+
+    id_rarity_list.sort(key=lambda x: x[2])
+
+    min_rank_list = []
+    rank_num = 1
+    for i, el in enumerate(id_rarity_list):
+        if i > 0 and id_rarity_list[i - 1][2] == id_rarity_list[i][2]:
+            min_rank_list.append([id_rarity_list[i][0], min_rank_list[i-1][1]])
+        else:
+            min_rank_list.append([id_rarity_list[i][0], rank_num])
+
+        rank_num += 1
+
+    min_rank_list.sort(key=lambda x: x[0])
+    mult_rank_list.sort(key=lambda x: x[0])
+    id_rarity_list.sort(key=lambda x: x[0])
+    id_link_price.sort(key=lambda x: x[1])
+    final_rarity_list = []
+    for j, e in enumerate(id_link_price):
+        for i, el in enumerate(id_rarity_list):
+            if el[0] == e[1]:
+                final_rarity_list.append([e[0],
+                                          e[1],
+                                          e[2],
+                                          str(mult_rank_list[i][1]),
+                                          str(min_rank_list[i][1]),
+                                          el[4],
+                                          e[3],
+                                          e[4],
+                                          e[6],
+                                          e[7],
+                                          str(round(el[1]*collection_size, 10)),
+                                          str(el[3]),
+                                          e[5]])
+
+    return final_rarity_list
+
+
+def other_for_sale(collection_name, collection_contract, collection_size):
+    iter_num = math.floor(collection_size/25)
+    extra_nums = collection_size - iter_num*25
+    trait_val_list = []
+    id_trait_list = []
+    id_link_price = []
+    for i in range(iter_num):
+        querystring = {"asset_contract_address": collection_contract,
+                       "token_ids": list(range(i * 25, (i + 1) * 25)),
+                       "order_direction": "desc",
+                       "offset": "0",
+                       "limit": "50"}
+
+        headers = {"Accept": "application/json", "X-API-KEY": "0fba3b6165af43ffb8a9c295f1d8beb5"}
+
+        response = requests.request("GET", url, headers=headers, params=querystring)
+        temp_list = list(response.json()['assets'])
+        for j, el in enumerate(temp_list):
+            if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
+                current_price = float(el['sell_orders'][0]['current_price'])/ 1e18
+                link = el["permalink"]
+                last_price = "None"
+                last_sale_date = "None"
+                if str(el['last_sale']) != "None":
+                    last_sale_date = el['last_sale']['event_timestamp']
+                    last_price = float(el['last_sale']['total_price']) / 1e18
+                created_date = el['sell_orders'][0]['created_date']
+                timestamp = el['sell_orders'][0]['listing_time']
+                id_link_price.append([collection_name,
+                                      int(el['token_id']),
+                                      current_price,
+                                      link,
+                                      created_date,
+                                      timestamp,
+                                      last_price, last_sale_date])
+            id_traits = []
+            for k, element in enumerate(el['traits']):
+                id_traits.append(element['value'])
+                if not trait_val_list:
+                    trait_val_list.append([element['value'], 1])
+                else:
+                    recognized = 0
+                    for l, e in enumerate(trait_val_list):
+                        if element['value'] == e[0]:
+                            e[1] += 1
+                            recognized = 1
+                            break
+                    if recognized == 0:
+                        trait_val_list.append([element['value'], 1])
+            id_trait_list.append([int(el['token_id']), id_traits])
+
+    if extra_nums > 0:
+        querystring = {"asset_contract_address": "0xa7d8d9ef8d8ce8992df33d8b8cf4aebabd5bd270",
+                       "token_ids": list(range(iter_num * 25, collection_size)),
+                       "order_direction": "desc",
+                       "offset": "0",
+                       "limit": "50"}
+
+        response = requests.request("GET", url, params=querystring)
+        temp_list = list(response.json()['assets'])
+        for j, el in enumerate(temp_list):
+            if str(el['sell_orders']) != "None" and float(el['sell_orders'][0]['current_price']) / 1e18 < 500:
+                current_price = float(el['sell_orders'][0]['current_price']) / 1e18
+                link = el["permalink"]
+                last_price = "None"
+                last_sale_date = "None"
+                if str(el['last_sale']) != "None":
+                    last_sale_date = el['last_sale']['event_timestamp']
+                    last_price = float(el['last_sale']['total_price']) / 1e18
+                created_date = el['sell_orders'][0]['created_date']
+                timestamp = el['sell_orders'][0]['listing_time']
+                id_link_price.append([collection_name,
+                                      int(el['token_id']),
+                                      current_price,
+                                      link,
+                                      created_date,
+                                      timestamp,
+                                      last_price, last_sale_date])
+            id_traits = []
+            for k, element in enumerate(el['traits']):
+                id_traits.append(element['value'])
+                if not trait_val_list:
+                    trait_val_list.append([element['value'], 1])
+                else:
+                    recognized = 0
+                    for l, e in enumerate(trait_val_list):
+                        if element['value'] == e[0]:
+                            e[1] += 1
+                            recognized = 1
+                            break
+                    if recognized == 0:
+                        trait_val_list.append([element['value'], 1])
+            id_trait_list.append([int(el['token_id']), id_traits])
+
+    for i, el in enumerate(trait_val_list):
+        el[1] /= collection_size
+    id_rarity_list = []
+    for i, el in enumerate(id_trait_list):
+        trait_vals = []
+        trait_str = []
+        for j, trait in enumerate(el[1]):
+            for k, t in enumerate(trait_val_list):
+                if t[0] == trait:
+                    trait_vals.append(round(t[1], 5))
+                    trait_str.append(str(round(t[1], 7)))
+        trait_mult = multiply(trait_vals)
+        min_trait = min(trait_vals)
+        trait_str.sort()
+        id_rarity_list.append([el[0], trait_mult, min_trait, '|| ' + ' || '.join(trait_str), len(trait_vals)])
+    id_rarity_list.sort(key=lambda x: x[1])
+
+    mult_rank_list = []
+    rank_num = 1
+    for i, el in enumerate(id_rarity_list):
+        if i > 0 and id_rarity_list[i-1][1] == id_rarity_list[i][1]:
+            mult_rank_list.append([id_rarity_list[i][0], mult_rank_list[i-1][1]])
+        else:
+            mult_rank_list.append([id_rarity_list[i][0], rank_num])
+
+        rank_num += 1
+
+    id_rarity_list.sort(key=lambda x: x[2])
+
+    min_rank_list = []
+    rank_num = 1
+    for i, el in enumerate(id_rarity_list):
+        if i > 0 and id_rarity_list[i - 1][2] == id_rarity_list[i][2]:
+            min_rank_list.append([id_rarity_list[i][0], min_rank_list[i-1][1]])
+        else:
+            min_rank_list.append([id_rarity_list[i][0], rank_num])
+
+        rank_num += 1
+
+    min_rank_list.sort(key=lambda x: x[0])
+    mult_rank_list.sort(key=lambda x: x[0])
+    id_rarity_list.sort(key=lambda x: x[0])
+    id_link_price.sort(key=lambda x: x[1])
+    final_rarity_list = []
+    for j, e in enumerate(id_link_price):
+        for i, el in enumerate(id_rarity_list):
+            if el[0] == e[1]:
+                final_rarity_list.append([e[0],
+                                          e[1],
+                                          e[2],
+                                          str(mult_rank_list[i][1]),
+                                          str(min_rank_list[i][1]),
+                                          el[4],
+                                          e[3],
+                                          e[4],
+                                          e[6],
+                                          e[7],
+                                          str(round(el[1]*collection_size, 10)),
+                                          str(el[3]),
+                                          e[5]])
+
+    return final_rarity_list
+
+
+def update_sheet(collection_list_ab, collection_list):
         scope = ['https://www.googleapis.com/auth/spreadsheets']
         SERVICE_ACCOUNT_FILE = 'keys.json'
         credentials = service_account.Credentials.from_service_account_file(
@@ -266,18 +353,26 @@ def update_sheet():
 
         service = build('sheets', 'v4', credentials=credentials)
 
-        fidenza_list = fidenza_for_sale()
-        ringers_list = ringers_for_sale()
-        pigments_list = pigments_for_sale()
+        final_list = []
+        for i, l in enumerate(collection_list_ab):
+            final_list += ab_for_sale(l[0], l[1], l[2])
 
-        archetypes_list = archetypes_for_sale()
-        dino_list = dinos_for_sale()
-        subscapes_list = subscapes_for_sale()
-
-
-        final_list = fidenza_list + ringers_list + pigments_list + dino_list + archetypes_list + subscapes_list
-        final_list.sort(key=lambda x: x[9], reverse=True)
-        final_list.insert(0, ["Collection","Id", "Current Price", "Rarity Rank", "Listing Date", "Link", "Rarity", "Last Price", "Last Sale Time", "Timestamp"])
+        for i, l in enumerate(collection_list):
+            final_list += other_for_sale(l[0], l[1], l[2])
+        final_list.sort(key=lambda x: float(x[12]), reverse=True)
+        final_list.insert(0, ['Collection Name',
+                                     'Id',
+                                     'Current Price',
+                                     'Rarity Rank',
+                                     'Individual Trait Rank',
+                                     'Number of Traits',
+                                     'Link',
+                                     'Listing Date',
+                                     'Last Sale Price',
+                                     'Last Sale Date',
+                                     'Rarity',
+                                     'Rarities of Traits',
+                                     'Timestamp'])
         body = {}
         service.spreadsheets().values().clear(spreadsheetId=SPREADSHEET_ID, range="Sheet1!A:Z",
                                               body=body).execute()
@@ -293,5 +388,19 @@ def update_sheet():
             valueInputOption="USER_ENTERED"
         ).execute()
 
+coll_list_ab = [
+   # ["Elevated Deconstructions", 7, 200],
+    ["720 Minutes", 27, 720],
+    ["Meridian", 163, 1000],
+    ["Ecumenopolis", 119, 676],
+    ["Algorhythms", 64, 1000],
+    ["Watercolor Dreams", 59, 600],
+    ["HyperHash", 11, 369]
+]
+coll_list_ab = [["Chimera", 320, 987]]
+coll_list = [
+    #["Loot", "0xff9c1b15b16263c61d017ee9f65c50e4ae0113d7", 7800]
+             #["Dope Wars", "0x8707276df042e89669d69a177d3da7dc78bd8723", 8000]
+             ]
 
-update_sheet()
+update_sheet(coll_list_ab, coll_list)
